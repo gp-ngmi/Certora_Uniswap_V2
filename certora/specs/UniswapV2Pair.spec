@@ -1,3 +1,5 @@
+using ERC20A as ERC20a
+using ERC20B as ERC20b
 
 methods {
     mint(address) returns(uint) envfree
@@ -5,206 +7,97 @@ methods {
     swap(uint,uint,address,bytes) envfree
     balanceOf(address)         returns(uint) envfree
     totalSupply()              returns(uint) envfree
+    getReserve()               returns(uint112) envfree
 }
 
 /*
-rule reserve0 <= balanceof token0
-rule reserve1 <= balanceof token1
 rule swap k / ?
-
-
-
 */
 
-function isContract(address _pair) returns bool {
-  uint32 size;
-    assembly {
-        size := extcodesize(a)
-    }
-    return (size > 0);
+
+/// mint must sends token to the user
+rule mintSpec {
+    address user; 
+    env e;
+    /*
+    Try to send token
+    uint amount0; uint amount1;
+    uint reserve0; uint reserve1;
+    (reserve0,reserve1)=getReserves();
+    Send token ?
+    maybe mint is not envfree
+    */
+    uint amount = mint(user);
+    minimum = Math.min(amount0.mul(totalSupply()  ) / _reserve0, amount1.mul(totalSupply()) / _reserve1);
+    assert amount != 0,"no token is minted";
+    assert amount >= minimum,"not enough token is minted";
 }
 
-
-/// setFeeTo must set  `_feeTo` as the new value of 'feeTo'
-rule setFeeToSpec {
-    address _feeTo; 
+/// mint must revert  if liquidity amount0 or amount 1 is equal to 0
+rule mintRevert {
+    address user; 
     env e;
-    require e.msg.sender == feeToSetter();
-    setFeeTo(e,_feeTo);
-    assert _feeTo == feeTo(),"setFeeTo must update the variable";
-}
-
-/// setFeeTo must revert  if msg.sender != feeToSetter
-rule setFeeToRevert {
-    address _feeTo; 
-    env e;
-    require e.msg.sender != feeToSetter();
-    require _feeTo != feeTo();
-    setFeeTo@withrevert(e,_feeTo);
-    assert _feeTo != feeTo(),"setFeeTo must NOT update the variable";
-    ssert lastReverted,
-        " setFeeTo must revert  if msg.sender != feeToSetter";
+    /*
+    Try to send token
+    uint amount0; uint amount1;
+    uint reserve0; uint reserve1;
+    (reserve0,reserve1)=getReserves();
+    Send token ?
+    maybe mint is not envfree
+    */
+    require amount0=0;
+    mint@withrevert(to);
+    assert lastReverted,
+        "";
     
 }
 
-/// setFeeTo must not revert unless
-///    - msg.sender is not the feeToSetter
-/// @title setFeeTo doesn't revert
-rule setFeeToDoesntRevert {
-    address _feeTo; 
+/// mint must not revert unless
+///    - amount0 or amount 1 is equal to 0
+rule mintDoesntRevert {
+    address user; 
     env e;
-    require e.msg.sender == feeToSetter();
-    setFeeTo@withrevert(e,_feeTo);
-    assert !lastReverted;
-}
-
-/// setFeeToSetter must set  `_feeToSetter` as the new value of 'feeToSetter'
-rule setFeeToSetterSpec {
-    address _feeToSetter;
-    env e;
-    require e.msg.sender == feeToSetter();
-    setFeeToSetter(e,_feeToSetter);
-    assert _feeToSetter == feeToSetter(),"setFeeToSetter must update the variable";
-}
-
-/// setFeeToSetter must revert  if msg.sender != feeToSetter
-rule setFeeToSetterRevert {
-    address _feeToSetter;
-    env e;
-    require e.msg.sender != feeToSetter();
-    require _feeToSetter != feeToSetter();
-    setFeeToSetter@withrevert(e,_feeToSetter);
-    assert _feeToSetter != feeToSetter(),"setFeeToSetter must NOT update the variable";
-    ssert lastReverted,
-        " setFeeToSetter must revert  if msg.sender != feeToSetter";
-    
-}
-
-/// setFeeToSetter must not revert unless
-///    - msg.sender is not the feeToSetter
-/// @title setFeeToSetter doesn't revert
-rule setFeeToSetterDoesntRevert {
-    address _feeToSetter; 
-    env e;
-    require e.msg.sender == feeToSetter();
-    setFeeToSetter@withrevert(e,_feeToSetter);
-    assert !lastReverted;
-}
-
-////// createPair create a new Pool
-rule createPairSpec {
-    address tokenA; address tokenB;
-    require tokenA != tokenB;
-    //require getPair(tokenA,tokenB) == address(0);
-    require tokenA != address(0);
-    require tokenB != address(0);
-    address _pair = createPair(tokenA, tokenB);
-
-    //assert address(_pair).code.length >0,"";
-    assert _pair == getPair(tokenA,tokenB),
-        "";
-    assert _pair == getPair(tokenB,tokenA),
-        "";
-
-    assert isContract(_pair),"";
-    
-}
-
-/// createPair must revert
-rule createPairReverts1 {
-    address tokenA; address tokenB;
-    require tokenA == tokenB;
-    //require getPair(tokenA,tokenB) == address(0);
-    require tokenA != address(0);
-    require tokenB != address(0);
-    createPair@withrevert(tokenA, tokenB);
-
-    assert lastReverted,
+    /*
+    Try to send token
+    uint amount0; uint amount1;
+    uint reserve0; uint reserve1;
+    (reserve0,reserve1)=getReserves();
+    require amount0!=0;
+    require amount1!=0;
+    Send token ?
+    maybe mint is not envfree
+    */
+    mint@withrevert(to);
+    assert !lastReverted,
         "";
 }
 
-/// createPair must revert
-rule createPairReverts2 {
-    address tokenA; address tokenB;
-    require tokenA != tokenB;
-    //require getPair(tokenA,tokenB) == address(0);
-    require tokenA == address(0);
-    require tokenB != address(0);
-    createPair@withrevert(tokenA, tokenB);
+/*
+rules for burn :
+    - burnSpec, where we assert user get both tokens
+    - burnRevert, where no lp token is sending
+    - burnDoesntRevert, unless no lp token is send
+*/
 
-    assert lastReverted,
-        "";
-}
+/*
+rules for swap :
+    - swapSpec, where user get tokens
+    - swapRevert1, where amount0Out and amount1Out are 0
+    - swapRevert2, where reserves are not enough
+    - swapRevert3, where we are sending token to contract token of the pool
+    - swapRevert4, where user doesn't get back token
+    - swapRevert5, where invariant K is break
+    - swapDoesntRevert, if we sent a minimum amount 
 
-/// createPair must revert
-rule createPairReverts3 {
-    address tokenA; address tokenB;
-    require tokenA != tokenB;
-    //require getPair(tokenA,tokenB) == address(0);
-    require tokenA != address(0);
-    require tokenB == address(0);
-    createPair@withrevert(tokenA, tokenB);
-
-    assert lastReverted,
-        "";
-}
-
-/// createPair must revert
-rule createPairReverts4 {
-    address tokenA; address tokenB;
-    require tokenA != tokenB;
-    require tokenA != address(0);
-    require tokenB != address(0);
-    //require getPair(tokenA,tokenB) != address(0);
-    
-    createPair@withrevert(tokenA, tokenB);
-
-    assert lastReverted,
-        "";
-}
-
-
-/// createPair must not revert unless
-///    - tokenA or tokenB is equal to 0x0,
-///    - tokenA == tokenB 
-///    - The pair is not created,
-///
-/// @title createPair doesn't revert
-rule createPairDoesntRevert {
-    address tokenA; address tokenB;
-    require tokenA != tokenB;
-    //require getPair(tokenA,tokenB) == address(0);
-    require tokenA != address(0);
-    require tokenB != address(0);
-    createPair@withrevert(tokenA, tokenB);
-    assert !lastReverted;
-}
-
+invariant for swap :
+    - K = balance0*balance1 >= reserve0*reserve1
+*/
 
 //// Part 4: ghosts and hooks //////////////////////////////////////////////////
 
-ghost mathint sum_of_pairs {
-    init_state axiom sum_of_pairs == 0;
-}
-
-hook Sstore allPairs[KEY uint a] address new_value (address old_value) STORAGE {
-    // when a new pair is created, update ghost
-    sum_of_pairs = sum_of_pairs + 1;
-}
-
-invariant totalAllPairsIsSumOfPairs()
-    allPairsLength() == sum_of_pairs
-
-ghost mathint sum_of_balances {
-    init_state axiom sum_of_balances == 0;
-}
-
-hook Sstore balanceOf[KEY address a] uint new_value (uint old_value) STORAGE {
-    // when balance changes, update ghost
-    sum_of_balances = sum_of_balances + new_value - old_value;
-}
-
-invariant totalSupplyIsSumOfBalances()
-    totalSupply() == sum_of_balances
-
+//reserves is always less are equal to balances
+invariant reservesLESBalances()
+    (reserve0,reserve1)=getReserves();
+    reserve0<=ERC20a.balanceOf(address(this))
+    reserve1<=ERC20b.balanceOf(address(this))
 

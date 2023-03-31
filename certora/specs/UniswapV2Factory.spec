@@ -10,7 +10,13 @@ methods {
     allPair(uint) envfree
 }
 
-
+function isContract(address _pair) returns bool {
+  uint32 size;
+    assembly {
+        size := extcodesize(a)
+    }
+    return (size > 0);
+}
 
 
 
@@ -89,7 +95,8 @@ rule createPairSpec {
     require tokenB != address(0);
     address _pair = createPair(tokenA, tokenB);
 
-    //assert address(_pair).code.length >0,"";
+    //assert address(_pair).code.length >0,""; KO
+    //assert isContract(address(pair)) == true,"not a deloyed contract; KO
     assert _pair == getPair(tokenA,tokenB),
         "";
     assert _pair == getPair(tokenB,tokenA),
